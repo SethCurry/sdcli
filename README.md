@@ -2,6 +2,11 @@
 
 `sdcli` is a CLI application for generating images with the Stable Diffusion API.
 
+PR's and issues are welcome. The current roadmap is roughly:
+
+- Support for image-to-image generation in SD3
+- Support for the other models offered (e.g. SD2, SDXL, etc).
+
 ## Features
 
 - Generate and save images with the Stable Diffusion API
