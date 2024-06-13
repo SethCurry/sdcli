@@ -13,6 +13,16 @@ PR's and issues are welcome. The current roadmap is roughly:
 - Saves the prompt you used to generate the image in exif metadata so you can reference it
 - Can invoke commands after generating an image to open it in an image viewer or editor
 
+## Installation
+
+Binary releases are not currently implemented, though I would like to when I have time.
+
+For now, you'll need a functional Go toolchain installed, and can then run:
+
+```bash
+go install github.com/SethCurry/sdcli
+```
+
 ## Configuration
 
 Config is stored at ~/.config/sdcli/config.json (even on Windows, sorry ya'll).
