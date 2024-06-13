@@ -32,9 +32,9 @@ func getExifAdder(format string) (func([]byte, string) ([]byte, error), error) {
 }
 
 type Gen3Command struct {
-	Model          string   `optional:"model" default:"sd3" help:"The model to use.  Must be either sd3 or sd3turbo"`
-	Ratio          string   `optional:"ratio" help:"The aspect ratio to use when generating."`
-	OutputFormat   string   `optional:"format" default:"png" help:"The format of the returned image.  Must be either png or jpeg."`
+	Model          string   `optional:"model" default:"sd3-large" enum:"sd3-large,sd3-large-turbo,sd3-medium" help:"The model to use."`
+	Ratio          string   `optional:"ratio" default:"1:1" enum:"16:9,1:1,21:9,2:3,3:2,4:5,5:4,9:16,9:21" help:"The aspect ratio to use when generating."`
+	OutputFormat   string   `optional:"format" default:"png" enum:"png,jpeg" help:"The format of the returned image.  Must be either png or jpeg."`
 	NegativePrompt string   `optional:"negative" help:"The negative prompt to use during generation."`
 	Strength       float32  `optional:"strength" help:"The strength to use when doing image-to-image generation."`
 	Image          string   `optional:"image" type:"path" help:"The image to use for image-to-image generation."`
@@ -130,8 +130,19 @@ type Context struct {
 }
 
 type Config struct {
-	APIKey                string `json:"api_key"`
-	OutputDirectory       string `json:"output_directory"`
+	// The Stability API key to use for generating images.
+	APIKey string `json:"api_key"`
+
+	// The directory to output images to.  This can be an absolute or relative path,
+	// but it will not expand tilde for home directories nor will it interpret environment
+	// variables.
+	//
+	// Images will be saved by Unix timestamp with an appropriate file ending.
+	OutputDirectory string `json:"output_directory"`
+
+	// The command to run after generating an image.  This command will be invoked with
+	// the path to the image as an argument.  E.g. putting "firefox" in here will result
+	// in "firefox /path/to/image" being called after the image is generated.
 	PostGenerationCommand string `json:"post_generation_command"`
 }
 
