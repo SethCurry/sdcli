@@ -1,3 +1,4 @@
+name: Create Release Packages
 on:
   release:
     types: [created]

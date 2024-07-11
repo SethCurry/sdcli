@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,9 +11,9 @@ import (
 	"time"
 
 	"github.com/SethCurry/sdcli/internal/exif"
+	"github.com/SethCurry/sdcli/internal/sdcli"
 	"github.com/SethCurry/sdcli/pkg/stability"
 	"github.com/alecthomas/kong"
-	"github.com/mitchellh/go-homedir"
 	"go.uber.org/zap"
 )
 
@@ -126,33 +125,7 @@ type CLI struct {
 
 type Context struct {
 	Logger *zap.Logger
-	Config Config
-}
-
-type Config struct {
-	// The Stability API key to use for generating images.
-	APIKey string `json:"api_key"`
-
-	// The directory to output images to.  This can be an absolute or relative path,
-	// but it will not expand tilde for home directories nor will it interpret environment
-	// variables.
-	//
-	// Images will be saved by Unix timestamp with an appropriate file ending.
-	OutputDirectory string `json:"output_directory"`
-
-	// The command to run after generating an image.  This command will be invoked with
-	// the path to the image as an argument.  E.g. putting "firefox" in here will result
-	// in "firefox /path/to/image" being called after the image is generated.
-	PostGenerationCommand string `json:"post_generation_command"`
-}
-
-func getConfigDir() (string, error) {
-	home, err := homedir.Dir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get user home directory: %w", err)
-	}
-
-	return filepath.Join(home, ".config", "sdcli"), nil
+	Config sdcli.Config
 }
 
 func main() {
@@ -161,21 +134,14 @@ func main() {
 		panic(fmt.Errorf("failed to create logger: %w", err))
 	}
 
-	configDir, err := getConfigDir()
+	configPath, err := sdcli.DefaultConfigPath()
 	if err != nil {
-		logger.Fatal("failed to get config directory", zap.Error(err))
+		logger.Fatal("failed to get default config path", zap.Error(err))
 	}
 
-	configData, err := os.ReadFile(filepath.Join(configDir, "config.json"))
+	config, err := sdcli.ParseConfigFile(configPath)
 	if err != nil {
-		logger.Fatal("failed to read config data", zap.Error(err))
-	}
-
-	var config Config
-
-	err = json.Unmarshal(configData, &config)
-	if err != nil {
-		logger.Fatal("failed to unmarshal config JSON", zap.Error(err))
+		logger.Fatal("unabled to read config file", zap.String("path", configPath), zap.Error(err))
 	}
 
 	cli := &CLI{}
@@ -184,7 +150,7 @@ func main() {
 
 	err = ctx.Run(&Context{
 		Logger: logger,
-		Config: config,
+		Config: *config,
 	})
 	if err != nil {
 		logger.Fatal("failed to execute command", zap.Error(err))
