@@ -113,8 +113,36 @@ func WithImage(reader io.Reader) Generate3Option {
 	}
 }
 
-func Generate3(ctx context.Context, baseURL string, apiKey string, options ...Generate3Option) ([]byte, error) {
-	reqURL := fmt.Sprintf("%s/v2beta/stable-image/generate/sd3", baseURL)
+// ClientOption is a function that can be used as an option
+// for the NewClient function.
+type ClientOption func(*Client)
+
+// NewClient creates a new *Client.  The API key is mandatory,
+// and any number of ClientOptions can be passed in to customize
+// the client's behavior.
+func NewClient(apiKey string, options ...ClientOption) *Client {
+	client := &Client{
+		apiKey:     apiKey,
+		baseURL:    "https://api.stability.ai",
+		httpClient: http.DefaultClient,
+	}
+
+	for _, option := range options {
+		option(client)
+	}
+
+	return client
+}
+
+// Client implements a client for Stability's Stable Diffusion API.
+type Client struct {
+	apiKey     string
+	baseURL    string
+	httpClient *http.Client
+}
+
+func (c *Client) Generate3(ctx context.Context, writeTo io.Writer, options ...Generate3Option) error {
+	reqURL := fmt.Sprintf("%s/v2beta/stable-image/generate/sd3", c.baseURL)
 
 	var formBuf bytes.Buffer
 
@@ -123,38 +151,39 @@ func Generate3(ctx context.Context, baseURL string, apiKey string, options ...Ge
 	for _, v := range options {
 		err := v(writer)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
 	err := writer.Close()
 	if err != nil {
-		return nil, fmt.Errorf("failed to close multipart writer: %w", err)
+		return fmt.Errorf("failed to close multipart writer: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", reqURL, &formBuf)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Accept", "image/*")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %v", err)
+		return fmt.Errorf("failed to send request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read image from response: %w", err)
-	}
-
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("got unexpected status code %d while generating image. Response: %s", resp.StatusCode, string(body))
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("got unexpected status code %d while generating image. Response: %s", resp.StatusCode, string(body))
 	}
 
-	return body, nil
+	_, err = io.Copy(writeTo, resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to copy image to writer: %w", err)
+	}
+
+	return nil
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -16,8 +17,6 @@ import (
 	"github.com/alecthomas/kong"
 	"go.uber.org/zap"
 )
-
-const defaultBaseURL = "https://api.stability.ai"
 
 func getExifAdder(format string) (func([]byte, string) ([]byte, error), error) {
 	switch format {
@@ -79,7 +78,11 @@ func (g Gen3Command) Run(ctx *Context) error {
 		opts = append(opts, stability.WithImage(fd))
 	}
 
-	gotImage, err := stability.Generate3(context.Background(), defaultBaseURL, ctx.Config.APIKey, opts...)
+	stabilityClient := stability.NewClient(ctx.Config.APIKey)
+
+	buf := new(bytes.Buffer)
+
+	err := stabilityClient.Generate3(context.Background(), buf, opts...)
 	if err != nil {
 		ctx.Logger.Fatal("failed to generate image", zap.Error(err))
 	}
@@ -88,6 +91,8 @@ func (g Gen3Command) Run(ctx *Context) error {
 	if err != nil {
 		ctx.Logger.Fatal("failed to find Exif adder", zap.Error(err))
 	}
+
+	gotImage := buf.Bytes()
 
 	imageWithNewExif, err := exifAdder(gotImage, prompt)
 	if err != nil {
