@@ -143,6 +143,10 @@ type Client struct {
 }
 
 func (c *Client) Generate3(ctx context.Context, writeTo io.Writer, generateRequest Generate3Request) error {
+	if err := generateRequest.Validate(); err != nil {
+		return fmt.Errorf("Generate3Request is invalid: %w", err)
+	}
+
 	reqURL := fmt.Sprintf("%s/v2beta/stable-image/generate/sd3", c.baseURL)
 
 	var formBuf bytes.Buffer
