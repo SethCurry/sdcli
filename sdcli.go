@@ -46,26 +46,28 @@ func (g Gen3Command) Run(ctx *Context) error {
 		ctx.Logger.Fatal("prompt is empty, exiting")
 	}
 
-	opts := []stability.Generate3Option{stability.WithPrompt(prompt)}
+	request := stability.Generate3Request{
+		Prompt: prompt,
+	}
 
 	if g.Ratio != "" {
-		opts = append(opts, stability.WithAspectRatio(g.Ratio))
+		request.AspectRatio = g.Ratio
 	}
 
 	if g.Model != "" {
-		opts = append(opts, stability.WithModel(g.Model))
+		request.Model = g.Model
 	}
 
 	if g.OutputFormat != "" {
-		opts = append(opts, stability.WithOutputFormat(g.OutputFormat))
+		request.OutputFormat = g.OutputFormat
 	}
 
 	if g.NegativePrompt != "" {
-		opts = append(opts, stability.WithNegativePrompt(g.NegativePrompt))
+		request.NegativePrompt = g.NegativePrompt
 	}
 
 	if g.Strength != 0 {
-		opts = append(opts, stability.WithStrength(g.Strength))
+		request.Strength = g.Strength
 	}
 
 	if g.Image != "" {
@@ -75,14 +77,14 @@ func (g Gen3Command) Run(ctx *Context) error {
 		}
 		defer fd.Close()
 
-		opts = append(opts, stability.WithImage(fd))
+		request.Image = fd
 	}
 
 	stabilityClient := stability.NewClient(ctx.Config.APIKey)
 
 	buf := new(bytes.Buffer)
 
-	err := stabilityClient.Generate3(context.Background(), buf, opts...)
+	err := stabilityClient.Generate3(context.Background(), buf, request)
 	if err != nil {
 		ctx.Logger.Fatal("failed to generate image", zap.Error(err))
 	}

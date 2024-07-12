@@ -13,13 +13,65 @@ import (
 )
 
 type Generate3Request struct {
-	AspectRatio    string  `json:"aspect_ratio"`
-	Prompt         string  `json:"prompt"`
-	Model          string  `json:"model"`
-	OutputFormat   string  `json:"output_format"`
-	NegativePrompt string  `json:"negative_prompt"`
-	Strength       float32 `json:"strength"`
-	Image          []byte  `json:"image"`
+	AspectRatio    string
+	Prompt         string
+	Model          string
+	OutputFormat   string
+	NegativePrompt string
+	Strength       float32
+	Image          io.Reader
+}
+
+func (g Generate3Request) ToFormData(writeTo io.Writer) (string, error) {
+	writer := multipart.NewWriter(writeTo)
+
+	if err := writer.WriteField("aspect_ratio", g.AspectRatio); err != nil {
+		return "", fmt.Errorf("failed to write aspect_ratio field in form data: %w", err)
+	}
+
+	if err := writer.WriteField("prompt", g.Prompt); err != nil {
+		return "", fmt.Errorf("failed to write prompt field in form data: %w", err)
+	}
+
+	if g.Model != "" {
+		if err := writer.WriteField("model", g.Model); err != nil {
+			return "", fmt.Errorf("failed to write model field in form data: %w", err)
+		}
+	}
+
+	if g.OutputFormat != "" {
+		if err := writer.WriteField("output_format", g.OutputFormat); err != nil {
+			return "", fmt.Errorf("failed to write output_format field in form data: %w", err)
+		}
+	}
+
+	if g.NegativePrompt != "" {
+		if err := writer.WriteField("negative_prompt", g.NegativePrompt); err != nil {
+			return "", fmt.Errorf("failed to write negative_prompt field in form data: %w", err)
+		}
+	}
+
+	if g.Strength != 0 {
+		if err := writer.WriteField("strength", strconv.FormatFloat(float64(g.Strength), 'f', 2, 32)); err != nil {
+			return "", fmt.Errorf("failed to write strength field in this form data: %w", err)
+		}
+	}
+
+	imageWriter, err := writer.CreateFormField("image")
+	if err != nil {
+		return "", fmt.Errorf("failed to create form field for image: %w", err)
+	}
+
+	_, err = io.Copy(imageWriter, g.Image)
+	if err != nil {
+		return "", fmt.Errorf("failed to copy image to form fields for request: %w", err)
+	}
+
+	if err := writer.Close(); err != nil {
+		return "", fmt.Errorf("failed to close form data writer: %w", err)
+	}
+
+	return writer.FormDataContentType(), nil
 }
 
 func validateAspectRatio(ratio string) error {
@@ -64,55 +116,6 @@ func (g Generate3Request) Validate() error {
 
 type Generate3Option func(*multipart.Writer) error
 
-func WithAspectRatio(ratio string) Generate3Option {
-	return func(req *multipart.Writer) error {
-		return req.WriteField("aspect_ratio", ratio)
-	}
-}
-
-func WithPrompt(prompt string) Generate3Option {
-	return func(req *multipart.Writer) error {
-		return req.WriteField("prompt", prompt)
-	}
-}
-
-func WithModel(model string) Generate3Option {
-	return func(req *multipart.Writer) error {
-		return req.WriteField("model", model)
-	}
-}
-
-func WithOutputFormat(format string) Generate3Option {
-	return func(req *multipart.Writer) error {
-		return req.WriteField("output_format", format)
-	}
-}
-
-func WithNegativePrompt(prompt string) Generate3Option {
-	return func(req *multipart.Writer) error {
-		return req.WriteField("negative_prompt", prompt)
-	}
-}
-
-func WithStrength(strength float32) Generate3Option {
-	return func(req *multipart.Writer) error {
-		return req.WriteField("strength", strconv.FormatFloat(float64(strength), 'f', 2, 32))
-	}
-}
-
-func WithImage(reader io.Reader) Generate3Option {
-	return func(req *multipart.Writer) error {
-		writer, err := req.CreateFormField("image")
-		if err != nil {
-			return fmt.Errorf("failed to create image field in request: %w", err)
-		}
-
-		_, err = io.Copy(writer, reader)
-
-		return err
-	}
-}
-
 // ClientOption is a function that can be used as an option
 // for the NewClient function.
 type ClientOption func(*Client)
@@ -141,23 +144,14 @@ type Client struct {
 	httpClient *http.Client
 }
 
-func (c *Client) Generate3(ctx context.Context, writeTo io.Writer, options ...Generate3Option) error {
+func (c *Client) Generate3(ctx context.Context, writeTo io.Writer, generateRequest Generate3Request) error {
 	reqURL := fmt.Sprintf("%s/v2beta/stable-image/generate/sd3", c.baseURL)
 
 	var formBuf bytes.Buffer
 
-	writer := multipart.NewWriter(&formBuf)
-
-	for _, v := range options {
-		err := v(writer)
-		if err != nil {
-			return err
-		}
-	}
-
-	err := writer.Close()
+	contentType, err := generateRequest.ToFormData(&formBuf)
 	if err != nil {
-		return fmt.Errorf("failed to close multipart writer: %w", err)
+		return fmt.Errorf("failed to generate form data for Generate3 request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", reqURL, &formBuf)
@@ -165,7 +159,7 @@ func (c *Client) Generate3(ctx context.Context, writeTo io.Writer, options ...Ge
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Accept", "image/*")
 
