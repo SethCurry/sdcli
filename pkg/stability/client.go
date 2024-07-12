@@ -12,16 +12,47 @@ import (
 	"strings"
 )
 
+// Generate3Request encapsulates all of the parameters for generating an image with
+// the Stable Diffusion 3 API.
 type Generate3Request struct {
-	AspectRatio    string
-	Prompt         string
-	Model          string
-	OutputFormat   string
+	// AspectRatio is the aspect ratio of the image to generate.
+	// This is limited to a particular set of values, arbitrary
+	// ratios will not work.
+	//
+	// The currently accepted values are:
+	// 16:9, 1:1, 21:9, 2:3, 3:2, 4:5, 5:4, 9:16, 9:21
+	AspectRatio string
+
+	// Prompt is the prompt to use for generating an image.
+	//
+	// It is a required field.
+	Prompt string
+
+	// Model is the model to use, since there are several variants of Stable Diffusion 3.
+	//
+	// It is a required field.
+	Model string
+
+	// OutputFormat is the format of the image to generate.
+	// Valid values are png and jpeg.
+	//
+	// It is a required field.
+	OutputFormat string
+
+	// NegativePrompt is the negative prompt provided to Stable Diffusion 3.
 	NegativePrompt string
-	Strength       float32
-	Image          io.Reader
+
+	// Strength is the strength of the prompt.
+	// It ranges from 0.0 to 1.0.
+	Strength float32
+
+	// Image allows providing an image for image-to-image generation.
+	Image io.Reader
 }
 
+// ToFormData converts the Generate3Request into a form-data payload that can be sent to the Stable Diffusion 3 API.
+// It returns the Content-Type header the form-data payload should be sent with, along with an error
+// if it was unable to write any of the fields to the form data.
 func (g Generate3Request) ToFormData(writeTo io.Writer) (string, error) {
 	writer := multipart.NewWriter(writeTo)
 
