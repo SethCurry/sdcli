@@ -114,8 +114,6 @@ func (g Generate3Request) Validate() error {
 	return nil
 }
 
-type Generate3Option func(*multipart.Writer) error
-
 // ClientOption is a function that can be used as an option
 // for the NewClient function.
 type ClientOption func(*Client)
