@@ -51,7 +51,11 @@ func (g Gen3Command) Run(ctx *Context) error {
 	}
 
 	if g.Ratio != "" {
-		request.AspectRatio = g.Ratio
+		parsedRatio, err := stability.ParseAspectRatio(g.Ratio)
+		if err != nil {
+			ctx.Logger.Fatal("aspect ratio is invalid", zap.Error(err))
+		}
+		request.AspectRatio = *parsedRatio
 	}
 
 	if g.Model != "" {
