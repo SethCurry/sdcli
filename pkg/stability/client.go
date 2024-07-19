@@ -38,6 +38,54 @@ type Client struct {
 	httpClient *http.Client
 }
 
+type requestFormData interface {
+	toFormData(*multipart.Writer) error
+}
+
+func (c *Client) newRequest(ctx context.Context, reqURL string, requestData requestFormData) (*http.Request, error) {
+	var formData bytes.Buffer
+
+	writer := multipart.NewWriter(&formData)
+
+	if err := requestData.toFormData(writer); err != nil {
+		writer.Close()
+		return nil, err
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close form data writer: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, &formData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Accept", "image/*")
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	return req, nil
+}
+
+func (c *Client) doRequest(req *http.Request, writeTo io.Writer) error {
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("http request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("expected status code 200 on HTTP request, but got %d", resp.StatusCode)
+	}
+
+	if _, err := io.Copy(writeTo, resp.Body); err != nil {
+		return fmt.Errorf("failed to copy image response: %w", err)
+	}
+
+	return nil
+}
+
 // GenerateUltra generates an image using the Stable Image Ultra API.
 func (c *Client) GenerateUltra(ctx context.Context, writeTo io.Writer, generateRequest GenerateUltraRequest) error {
 	if err := generateRequest.validate(); err != nil {
@@ -46,41 +94,12 @@ func (c *Client) GenerateUltra(ctx context.Context, writeTo io.Writer, generateR
 
 	reqURL := fmt.Sprintf("%s/v2beta/stable-image/generate/ultra", c.baseURL)
 
-	var formBuf bytes.Buffer
-
-	formWriter := multipart.NewWriter(&formBuf)
-
-	if err := generateRequest.toFormData(formWriter); err != nil {
-		formWriter.Close()
-		return fmt.Errorf("failed to generate form data for request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, &formBuf)
+	req, err := c.newRequest(ctx, reqURL, generateRequest)
 	if err != nil {
-		return fmt.Errorf("failed to create HTTP request: %w", err)
+		return err
 	}
 
-	req.Header.Set("Content-Type", formWriter.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("Accept", "image/*")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("got unexpected status code %d while generating image. Response: %s", resp.StatusCode, string(body))
-	}
-
-	_, err = io.Copy(writeTo, resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to copy image to writer: %w", err)
-	}
-
-	return nil
+	return c.doRequest(req, writeTo)
 }
 
 // Generate3 generates an image using the Stable Diffusion 3 API.
@@ -93,44 +112,10 @@ func (c *Client) Generate3(ctx context.Context, writeTo io.Writer, generateReque
 
 	reqURL := fmt.Sprintf("%s/v2beta/stable-image/generate/sd3", c.baseURL)
 
-	var formBuf bytes.Buffer
-
-	formWriter := multipart.NewWriter(&formBuf)
-
-	err := generateRequest.toFormData(formWriter)
+	req, err := c.newRequest(ctx, reqURL, generateRequest)
 	if err != nil {
-		formWriter.Close()
-		return fmt.Errorf("failed to generate form data for Generate3 request: %w", err)
+		return err
 	}
 
-	if err = formWriter.Close(); err != nil {
-		return fmt.Errorf("failed to close form writer: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", reqURL, &formBuf)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", formWriter.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("Accept", "image/*")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("got unexpected status code %d while generating image. Response: %s", resp.StatusCode, string(body))
-	}
-
-	_, err = io.Copy(writeTo, resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to copy image to writer: %w", err)
-	}
-
-	return nil
+	return c.doRequest(req, writeTo)
 }
