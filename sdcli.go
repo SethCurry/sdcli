@@ -29,6 +29,86 @@ func getExifAdder(format string) (func([]byte, string) ([]byte, error), error) {
 	return nil, fmt.Errorf("unknown output format %q", format)
 }
 
+type GenUltraCommand struct {
+	NegativePrompt string   `optional:"negative" help:"The negative prompt to use during generation."`
+	Ratio          string   `optional:"ratio" default:"1:1" enum:"16:9,1:1,21:9,2:3,3:2,4:5,5:4,9:16,9:21" help:"The aspect ratio to use when generating."`
+	OutputFormat   string   `optional:"format" default:"png" enum:"png,jpeg" help:"The format of the returned image. Must be either png or jpeg."`
+	PromptParts    []string `arg:"" help:"The prompt to use for generation."`
+}
+
+func (g GenUltraCommand) Run(ctx *Context) error {
+	prompt := strings.Join(g.PromptParts, " ")
+
+	if prompt == "" {
+		ctx.Logger.Fatal("prompt is empty, exiting")
+	}
+
+	request := stability.GenerateUltraRequest{
+		Prompt: stability.Prompt(prompt),
+	}
+
+	if g.Ratio != "" {
+		parsedRatio, err := stability.ParseAspectRatio(g.Ratio)
+		if err != nil {
+			ctx.Logger.Fatal("aspect ratio is invalid", zap.Error(err))
+		}
+		request.AspectRatio = *parsedRatio
+	}
+
+	if g.OutputFormat != "" {
+		request.OutputFormat = g.OutputFormat
+	}
+
+	if g.NegativePrompt != "" {
+		request.NegativePrompt = stability.Prompt(g.NegativePrompt)
+	}
+
+	stabilityClient := stability.NewClient(ctx.Config.APIKey)
+
+	buf := new(bytes.Buffer)
+
+	err := stabilityClient.GenerateUltra(context.Background(), buf, request)
+	if err != nil {
+		ctx.Logger.Fatal("failed to generate image", zap.Error(err))
+	}
+
+	exifAdder, err := getExifAdder(g.OutputFormat)
+	if err != nil {
+		ctx.Logger.Fatal("failed to find Exif adder", zap.Error(err))
+	}
+
+	gotImage := buf.Bytes()
+
+	imageWithNewExif, err := exifAdder(gotImage, prompt)
+	if err != nil {
+		ctx.Logger.Fatal("failed to add new exif metadata", zap.Error(err))
+	}
+
+	currentTime := strconv.FormatInt(time.Now().Unix(), 10)
+
+	outputFile := filepath.Join(ctx.Config.OutputDirectory, fmt.Sprintf("%s.%s", currentTime, g.OutputFormat))
+	if _, err := os.Stat(outputFile); err == nil {
+		ctx.Logger.Fatal("output file already exists", zap.String("path", outputFile))
+	}
+
+	err = os.WriteFile(outputFile, imageWithNewExif, 0o644)
+	if err != nil {
+		ctx.Logger.Fatal("failed while writing to output file", zap.String("path", outputFile), zap.Error(err))
+	}
+
+	if ctx.Config.PostGenerationCommand != "" {
+		cmd := exec.Command(ctx.Config.PostGenerationCommand, outputFile)
+		err = cmd.Run()
+		if err != nil {
+			ctx.Logger.Error(
+				"post-generation command failed",
+				zap.String("command", fmt.Sprintf("%s %q", ctx.Config.PostGenerationCommand, outputFile)))
+		}
+	}
+
+	return nil
+}
+
 type Gen3Command struct {
 	Model          string   `optional:"model" default:"sd3-large" enum:"sd3-large,sd3-large-turbo,sd3-medium" help:"The model to use."`
 	Ratio          string   `optional:"ratio" default:"1:1" enum:"16:9,1:1,21:9,2:3,3:2,4:5,5:4,9:16,9:21" help:"The aspect ratio to use when generating."`
@@ -131,7 +211,8 @@ func (g Gen3Command) Run(ctx *Context) error {
 }
 
 type CLI struct {
-	Gen3 Gen3Command `cmd:"" help:"Generate an image with Stable Diffusion 3"`
+	Gen3  Gen3Command     `cmd:"" help:"Generate an image with Stable Diffusion 3"`
+	Ultra GenUltraCommand `cmd:"" help:"Generate an image with the Stable Image Ultra API."`
 }
 
 type Context struct {
