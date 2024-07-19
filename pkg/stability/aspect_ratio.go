@@ -19,10 +19,10 @@ func (a AspectRatio) String() string {
 	return fmt.Sprintf("%d:%d", a.Width, a.Height)
 }
 
-// Validate ensures that the aspect ratio is valid by checking
+// validate ensures that the aspect ratio is valid by checking
 // - Whether height or width is less than 1
 // - Whether the aspect ratio is one recognized by the Stable Diffusion API
-func (a AspectRatio) Validate() error {
+func (a AspectRatio) validate() error {
 	if a.Width <= 0 {
 		return fmt.Errorf("aspect ratio width is less than 0: %d", a.Width)
 	}

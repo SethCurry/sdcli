@@ -9,9 +9,9 @@ import (
 // method to perform validation that the prompt is not too long.
 type Prompt string
 
-// Validate checks to ensure that the prompt is valid by returning an error
+// validate checks to ensure that the prompt is valid by returning an error
 // if it is longer than 10,000 characters.
-func (p Prompt) Validate() error {
+func (p Prompt) validate() error {
 	if len(p) > 10000 {
 		return fmt.Errorf("prompt of length %d is invalid: %w", len(p), ErrPromptTooLong)
 	}

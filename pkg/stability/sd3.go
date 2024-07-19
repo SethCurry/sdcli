@@ -149,16 +149,16 @@ func (g Generate3Request) validate() error {
 		return errors.New("prompt cannot be empty")
 	}
 
-	if err := g.Prompt.Validate(); err != nil {
+	if err := g.Prompt.validate(); err != nil {
 		return fmt.Errorf("prompt is invalid: %w", err)
 	}
 
-	if err := g.NegativePrompt.Validate(); err != nil {
+	if err := g.NegativePrompt.validate(); err != nil {
 		return fmt.Errorf("negative prompt is invalid: %w", err)
 	}
 
-	if g.AspectRatio.Width == 0 || g.AspectRatio.Height == 0 {
-		return fmt.Errorf("invalid aspect ratio: %q", g.AspectRatio.String())
+	if err := g.AspectRatio.validate(); err != nil {
+		return fmt.Errorf("aspect ratio is invalid: %w", err)
 	}
 
 	if err := g.Model.validate(); err != nil {
