@@ -7,6 +7,39 @@ import (
 	"strconv"
 )
 
+// SD3Model is a representation of a Stable Diffusion 3 model.
+type SD3Model string
+
+// Exists returns whether the model name is a known Stable Diffusion 3 model
+// by checking whether it exists in AllSD3Models.
+func (s SD3Model) Exists() bool {
+	for _, m := range AllSD3Models {
+		if s == m {
+			return true
+		}
+	}
+
+	return false
+}
+
+const (
+	// SD3Medium represents the sd3-medium model for Stable Diffusion 3.
+	SD3Medium = SD3Model("sd3-medium")
+
+	// SD3Large represents the sd3-large model for Stable Diffusion 3.
+	SD3Large = SD3Model("sd3-large")
+
+	// SD3LargeTurbo represents the sd3-large-turbo model for Stable Diffusion 3.
+	SD3LargeTurbo = SD3Model("sd3-large-turbo")
+)
+
+// AllSD3Models stores a list of all of the valid Stable Diffusion 3 models.
+var AllSD3Models = []SD3Model{
+	SD3Medium,
+	SD3Large,
+	SD3LargeTurbo,
+}
+
 // Generate3Request encapsulates all of the parameters for generating an image with
 // the Stable Diffusion 3 API.
 type Generate3Request struct {
@@ -26,7 +59,7 @@ type Generate3Request struct {
 	// Model is the model to use, since there are several variants of Stable Diffusion 3.
 	//
 	// It is a required field.
-	Model string
+	Model SD3Model
 
 	// OutputFormat is the format of the image to generate.
 	// Valid values are png and jpeg.
@@ -48,56 +81,54 @@ type Generate3Request struct {
 // ToFormData converts the Generate3Request into a form-data payload that can be sent to the Stable Diffusion 3 API.
 // It returns the Content-Type header the form-data payload should be sent with, along with an error
 // if it was unable to write any of the fields to the form data.
-func (g Generate3Request) ToFormData(writeTo io.Writer) (string, error) {
-	writer := multipart.NewWriter(writeTo)
-
+func (g Generate3Request) ToFormData(writer *multipart.Writer) error {
 	if err := writer.WriteField("aspect_ratio", g.AspectRatio.String()); err != nil {
-		return "", fmt.Errorf("failed to write aspect_ratio field in form data: %w", err)
+		return fmt.Errorf("failed to write aspect_ratio field in form data: %w", err)
 	}
 
 	if err := writer.WriteField("prompt", g.Prompt); err != nil {
-		return "", fmt.Errorf("failed to write prompt field in form data: %w", err)
+		return fmt.Errorf("failed to write prompt field in form data: %w", err)
 	}
 
 	if g.Model != "" {
-		if err := writer.WriteField("model", g.Model); err != nil {
-			return "", fmt.Errorf("failed to write model field in form data: %w", err)
+		if err := writer.WriteField("model", string(g.Model)); err != nil {
+			return fmt.Errorf("failed to write model field in form data: %w", err)
 		}
 	}
 
 	if g.OutputFormat != "" {
 		if err := writer.WriteField("output_format", g.OutputFormat); err != nil {
-			return "", fmt.Errorf("failed to write output_format field in form data: %w", err)
+			return fmt.Errorf("failed to write output_format field in form data: %w", err)
 		}
 	}
 
 	if g.NegativePrompt != "" {
 		if err := writer.WriteField("negative_prompt", g.NegativePrompt); err != nil {
-			return "", fmt.Errorf("failed to write negative_prompt field in form data: %w", err)
+			return fmt.Errorf("failed to write negative_prompt field in form data: %w", err)
 		}
 	}
 
 	if g.Strength != 0 {
 		if err := writer.WriteField("strength", strconv.FormatFloat(float64(g.Strength), 'f', 2, 32)); err != nil {
-			return "", fmt.Errorf("failed to write strength field in this form data: %w", err)
+			return fmt.Errorf("failed to write strength field in this form data: %w", err)
 		}
 	}
 
 	imageWriter, err := writer.CreateFormField("image")
 	if err != nil {
-		return "", fmt.Errorf("failed to create form field for image: %w", err)
+		return fmt.Errorf("failed to create form field for image: %w", err)
 	}
 
 	_, err = io.Copy(imageWriter, g.Image)
 	if err != nil {
-		return "", fmt.Errorf("failed to copy image to form fields for request: %w", err)
+		return fmt.Errorf("failed to copy image to form fields for request: %w", err)
 	}
 
 	if err := writer.Close(); err != nil {
-		return "", fmt.Errorf("failed to close form data writer: %w", err)
+		return fmt.Errorf("failed to close form data writer: %w", err)
 	}
 
-	return writer.FormDataContentType(), nil
+	return nil
 }
 
 func (g Generate3Request) Validate() error {
@@ -115,6 +146,10 @@ func (g Generate3Request) Validate() error {
 
 	if g.AspectRatio.Width == 0 || g.AspectRatio.Height == 0 {
 		return fmt.Errorf("invalid aspect ratio: %q", g.AspectRatio.String())
+	}
+
+	if !g.Model.Exists() {
+		return fmt.Errorf("unknown Stable Diffusion 3 model %q", string(g.Model))
 	}
 
 	return nil

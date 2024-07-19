@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 )
 
@@ -45,9 +46,16 @@ func (c *Client) Generate3(ctx context.Context, writeTo io.Writer, generateReque
 
 	var formBuf bytes.Buffer
 
-	contentType, err := generateRequest.ToFormData(&formBuf)
+	formWriter := multipart.NewWriter(&formBuf)
+
+	err := generateRequest.ToFormData(formWriter)
 	if err != nil {
+		formWriter.Close()
 		return fmt.Errorf("failed to generate form data for Generate3 request: %w", err)
+	}
+
+	if err = formWriter.Close(); err != nil {
+		return fmt.Errorf("failed to close form writer: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", reqURL, &formBuf)
@@ -55,7 +63,7 @@ func (c *Client) Generate3(ctx context.Context, writeTo io.Writer, generateReque
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("Content-Type", formWriter.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Accept", "image/*")
 

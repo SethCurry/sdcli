@@ -59,7 +59,7 @@ func (g Gen3Command) Run(ctx *Context) error {
 	}
 
 	if g.Model != "" {
-		request.Model = g.Model
+		request.Model = stability.SD3Model(g.Model)
 	}
 
 	if g.OutputFormat != "" {
