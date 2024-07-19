@@ -1,3 +1,4 @@
+// Package stability implements a client for the Stable Diffusion API.
 package stability
 
 import (
@@ -37,8 +38,11 @@ type Client struct {
 	httpClient *http.Client
 }
 
+// Generate3 generates an image using the Stable Diffusion 3 API.
+//
+// API Reference: https://platform.stability.ai/docs/api-reference#tag/Generate/paths/~1v2beta~1stable-image~1generate~1sd3/post
 func (c *Client) Generate3(ctx context.Context, writeTo io.Writer, generateRequest Generate3Request) error {
-	if err := generateRequest.Validate(); err != nil {
+	if err := generateRequest.validate(); err != nil {
 		return fmt.Errorf("Generate3Request is invalid: %w", err)
 	}
 
@@ -48,7 +52,7 @@ func (c *Client) Generate3(ctx context.Context, writeTo io.Writer, generateReque
 
 	formWriter := multipart.NewWriter(&formBuf)
 
-	err := generateRequest.ToFormData(formWriter)
+	err := generateRequest.toFormData(formWriter)
 	if err != nil {
 		formWriter.Close()
 		return fmt.Errorf("failed to generate form data for Generate3 request: %w", err)

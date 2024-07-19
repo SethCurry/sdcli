@@ -1,6 +1,7 @@
 package stability
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -10,9 +11,9 @@ import (
 // SD3Model is a representation of a Stable Diffusion 3 model.
 type SD3Model string
 
-// Exists returns whether the model name is a known Stable Diffusion 3 model
+// exists returns whether the model name is a known Stable Diffusion 3 model
 // by checking whether it exists in AllSD3Models.
-func (s SD3Model) Exists() bool {
+func (s SD3Model) exists() bool {
 	for _, m := range AllSD3Models {
 		if s == m {
 			return true
@@ -21,6 +22,18 @@ func (s SD3Model) Exists() bool {
 
 	return false
 }
+
+func (s SD3Model) validate() error {
+	if !s.exists() {
+		return fmt.Errorf("%w: %s", ErrUnknownModel, s)
+	}
+
+	return nil
+}
+
+// ErrUnknownModel is returned when the user selects a model that the Stable Diffusion API does
+// not support.
+var ErrUnknownModel = errors.New("unrecognized model name")
 
 const (
 	// SD3Medium represents the sd3-medium model for Stable Diffusion 3.
@@ -54,7 +67,7 @@ type Generate3Request struct {
 	// Prompt is the prompt to use for generating an image.
 	//
 	// It is a required field.
-	Prompt string
+	Prompt Prompt
 
 	// Model is the model to use, since there are several variants of Stable Diffusion 3.
 	//
@@ -68,25 +81,25 @@ type Generate3Request struct {
 	OutputFormat string
 
 	// NegativePrompt is the negative prompt provided to Stable Diffusion 3.
-	NegativePrompt string
+	NegativePrompt Prompt
 
 	// Strength is the strength of the prompt.
 	// It ranges from 0.0 to 1.0.
-	Strength float32
+	Strength Strength
 
 	// Image allows providing an image for image-to-image generation.
 	Image io.Reader
 }
 
-// ToFormData converts the Generate3Request into a form-data payload that can be sent to the Stable Diffusion 3 API.
+// toFormData converts the Generate3Request into a form-data payload that can be sent to the Stable Diffusion 3 API.
 // It returns the Content-Type header the form-data payload should be sent with, along with an error
 // if it was unable to write any of the fields to the form data.
-func (g Generate3Request) ToFormData(writer *multipart.Writer) error {
+func (g Generate3Request) toFormData(writer *multipart.Writer) error {
 	if err := writer.WriteField("aspect_ratio", g.AspectRatio.String()); err != nil {
 		return fmt.Errorf("failed to write aspect_ratio field in form data: %w", err)
 	}
 
-	if err := writer.WriteField("prompt", g.Prompt); err != nil {
+	if err := writer.WriteField("prompt", string(g.Prompt)); err != nil {
 		return fmt.Errorf("failed to write prompt field in form data: %w", err)
 	}
 
@@ -103,7 +116,7 @@ func (g Generate3Request) ToFormData(writer *multipart.Writer) error {
 	}
 
 	if g.NegativePrompt != "" {
-		if err := writer.WriteField("negative_prompt", g.NegativePrompt); err != nil {
+		if err := writer.WriteField("negative_prompt", string(g.NegativePrompt)); err != nil {
 			return fmt.Errorf("failed to write negative_prompt field in form data: %w", err)
 		}
 	}
@@ -131,25 +144,25 @@ func (g Generate3Request) ToFormData(writer *multipart.Writer) error {
 	return nil
 }
 
-func (g Generate3Request) Validate() error {
+func (g Generate3Request) validate() error {
 	if g.Prompt == "" {
-		return fmt.Errorf("prompt cannot be empty")
+		return errors.New("prompt cannot be empty")
 	}
 
-	if len(g.Prompt) > 10000 {
-		return fmt.Errorf("prompt of length %d is too long; must be 10,000 characters or less", len(g.Prompt))
+	if err := g.Prompt.Validate(); err != nil {
+		return fmt.Errorf("prompt is invalid: %w", err)
 	}
 
-	if g.Model != "sd3" && g.Model != "sd3turbo" {
-		return fmt.Errorf("model %q is invalid; must be either \"sd3\" or \"sd3turbo\"", g.Model)
+	if err := g.NegativePrompt.Validate(); err != nil {
+		return fmt.Errorf("negative prompt is invalid: %w", err)
 	}
 
 	if g.AspectRatio.Width == 0 || g.AspectRatio.Height == 0 {
 		return fmt.Errorf("invalid aspect ratio: %q", g.AspectRatio.String())
 	}
 
-	if !g.Model.Exists() {
-		return fmt.Errorf("unknown Stable Diffusion 3 model %q", string(g.Model))
+	if err := g.Model.validate(); err != nil {
+		return err
 	}
 
 	return nil

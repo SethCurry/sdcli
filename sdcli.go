@@ -47,7 +47,7 @@ func (g Gen3Command) Run(ctx *Context) error {
 	}
 
 	request := stability.Generate3Request{
-		Prompt: prompt,
+		Prompt: stability.Prompt(prompt),
 	}
 
 	if g.Ratio != "" {
@@ -67,11 +67,11 @@ func (g Gen3Command) Run(ctx *Context) error {
 	}
 
 	if g.NegativePrompt != "" {
-		request.NegativePrompt = g.NegativePrompt
+		request.NegativePrompt = stability.Prompt(g.NegativePrompt)
 	}
 
 	if g.Strength != 0 {
-		request.Strength = g.Strength
+		request.Strength = stability.Strength(g.Strength)
 	}
 
 	if g.Image != "" {
